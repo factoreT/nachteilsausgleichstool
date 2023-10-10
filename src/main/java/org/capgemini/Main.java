@@ -9,7 +9,6 @@ import java.io.*;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.*;
 
 public class Main {
@@ -63,8 +62,10 @@ public class Main {
             }
         }
         writeLineToConsole("Alle Dateien bearbeitet.");
+
         writeLineToConsole("Beginne Eintragung in Output Excel...");
         writeLineToOutFile("\n\nErfolgreich in Auszahlungssheet eingetragen:");
+
 
         Sheet sheet;
         if (outputWorkbook.getSheetIndex(LocalDate.now().toString() + "_generated") < 0) {
@@ -94,12 +95,12 @@ public class Main {
 
             writeLineToOutFile("\"" + entry.getVorname() + " " + entry.getName() + "\" ist berechtigt.");
         }
-        outputWorkbookInputStream.close();
 
         FileOutputStream outputStream = new FileOutputStream(outputWorkbookPath);
         outputWorkbook.write(outputStream);
-        outputWorkbook.close();
+
         outputStream.close();
+        outputWorkbook.close();
         writeLineToConsole("Output Excel erfolgreich geschrieben!");
         writer.close();
         TerminalCommunicator.endLoop();
@@ -213,9 +214,13 @@ public class Main {
                 break;
             }
             if (c.getCellType() != CellType.BLANK) {
-                String dayOfWeek = Objects.requireNonNull(parseDate(c))
-                                          .format(DateTimeFormatter.ofPattern("E", Locale.ENGLISH));
-
+                String dayOfWeek = "";
+                try {
+                    dayOfWeek = Objects.requireNonNull(parseDate(c))
+                                       .format(DateTimeFormatter.ofPattern("E", Locale.ENGLISH));
+                } catch (NullPointerException ignored) {
+                    writeLineToConsole("Fehler beim parsen des Datums. Bitte manuell prüfen.");
+                }
                 if (dayOfWeek.equalsIgnoreCase("sat") || dayOfWeek.equalsIgnoreCase("sun")) {
                     return true;
                 }
@@ -230,8 +235,7 @@ public class Main {
         try {
             return DateUtil.getJavaDate(cell.getNumericCellValue()).toInstant().atZone(ZoneId.systemDefault())
                            .toLocalDate();
-        } catch (DateTimeParseException e) {
-            writeLineToConsole("Fehler beim parsen des Datums. Bitte manuell prüfen.");
+        } catch (Exception e) {
             return null;
         }
     }
