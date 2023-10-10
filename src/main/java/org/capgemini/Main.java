@@ -7,7 +7,9 @@ import org.capgemini.data.Person;
 
 import java.io.*;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 
 public class Main {
@@ -39,10 +41,12 @@ public class Main {
         int index = 0;
         for (File ausgleichsDokument : Objects.requireNonNull(files)) {
             index++;
-            writeLineToConsole("Bearbeite Datei " + index + " von " + files.length);
+            writeLineToConsole(
+                    "Bearbeite Datei " + index + " von " + files.length + " (" + ausgleichsDokument.getName() + ") ");
             if (ausgleichsDokument.getName().equalsIgnoreCase("output.txt")) {
                 continue;
             }
+
 
             sheetDataSingle = new HashMap<>();
             FileInputStream ausgleichsDokumentStream = new FileInputStream(ausgleichsDokument);
@@ -116,8 +120,7 @@ public class Main {
             if (!DateUtil.isCellDateFormatted(cell)) {
                 value = String.valueOf((int) (cell.getNumericCellValue()));
             } else {
-                value = LocalDate.parse(cell.toString(), DateTimeFormatter.ofPattern("dd-MMM-yyyy", Locale.ENGLISH))
-                                 .format(DateTimeFormatter.ofPattern("dd.MM.yyyy"));
+                value = parseDateToString(cell);
             }
         } else {
             value = cell.toString();
@@ -203,18 +206,39 @@ public class Main {
     }
 
     public static boolean sheetIncludesWeekendDates(Sheet sheet) {
-        for (int i = 18; i < 44; i++) {
+        int i = 18;
+        while (i < 1000) {
             Cell c = sheet.getRow(i).getCell(0);
+            if (c.getCellType() == CellType.STRING && c.getStringCellValue().equalsIgnoreCase("summe")) {
+                break;
+            }
             if (c.getCellType() != CellType.BLANK) {
-                String dayOfWeek =
-                        LocalDate.parse(c.toString(), DateTimeFormatter.ofPattern("dd-MMM-yyyy", Locale.ENGLISH))
-                                 .format(DateTimeFormatter.ofPattern("E", Locale.ENGLISH));
+                String dayOfWeek = Objects.requireNonNull(parseDate(c))
+                                          .format(DateTimeFormatter.ofPattern("E", Locale.ENGLISH));
+
                 if (dayOfWeek.equalsIgnoreCase("sat") || dayOfWeek.equalsIgnoreCase("sun")) {
                     return true;
                 }
             }
+            i++;
         }
         return false;
+
+    }
+
+    public static LocalDate parseDate(Cell cell) {
+        try {
+            return DateUtil.getJavaDate(cell.getNumericCellValue()).toInstant().atZone(ZoneId.systemDefault())
+                           .toLocalDate();
+        } catch (DateTimeParseException e) {
+            writeLineToConsole("Fehler beim parsen des Datums. Bitte manuell prüfen.");
+            return null;
+        }
+    }
+
+    public static String parseDateToString(Cell cell) {
+        LocalDate date = parseDate(cell);
+        return date == null ? "???" : date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"));
     }
 
     public static void writeLineToOutFile(String message) {
