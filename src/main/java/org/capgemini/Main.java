@@ -12,6 +12,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 public class Main {
+    public static final String ANSI_RED = "\u001B[31m";
+    public static final String ANSI_GREEN = "\u001B[32m";
+    public static final String ANSI_YELLOW = "\u001B[33m";
+    public static final String ANSI_RESET = "\u001B[0m";
     private final static String SINGLE_MAP_FILENAME = "filename";
     public static String ausgleichsDokumentOrdnerPath = "";
     public static String berechnungsWorkbookPath = "";
@@ -32,7 +36,7 @@ public class Main {
         berchnungsWorkbook = new XSSFWorkbook(new FileInputStream(berechnungsWorkbookPath));
 
         writer = new PrintWriter(ausgleichsDokumentOrdnerPath + File.separator + "output.txt", "UTF-8");
-        writeLineToOutFile("Fehlerhafte Dokumente:");
+        writeLineToOutFile("Bearbeite Dateien:");
 
         Sheet berechnungSheet = berchnungsWorkbook.getSheetAt(0);
         readAdressenBerechnungssheet(berechnungSheet);
@@ -40,9 +44,10 @@ public class Main {
         int index = 0;
         for (File ausgleichsDokument : Objects.requireNonNull(files)) {
             index++;
-            writeLineToConsole(
-                    "Bearbeite Datei " + index + " von " + files.length + " (" + ausgleichsDokument.getName() + ") ");
+
             if (ausgleichsDokument.getName().equalsIgnoreCase("output.txt")) {
+                writeLineToConsole(
+                        ANSI_GREEN + "(o) " + ANSI_RESET + index + " von " + files.length + " (" + ausgleichsDokument.getName() + ") ");
                 continue;
             }
 
@@ -53,12 +58,39 @@ public class Main {
             sheetDataSingle.put(SINGLE_MAP_FILENAME, ausgleichsDokument.getName());
             readSingleSheet(workbook.getSheetAt(0));
 
-            if (checkPermission()) {
+            int returnCode = checkPermission();
+            Person checkPerson = sheetDataBerechnung.get(sheetDataSingle.get("email"));
+
+            if (returnCode == 0) {
+                writeLineToConsole(
+                        ANSI_GREEN + "(o) " + ANSI_RESET + index + " von " + files.length + " (" + ausgleichsDokument.getName() + ") ");
                 outputEntryList.add(new OutputEntry(sheetDataSingle.get("ggid"), sheetDataSingle.get("name"),
                                                     sheetDataSingle.get("vorname"),
                                                     Double.parseDouble(sheetDataSingle.get("sum")),
                                                     sheetDataSingle.get("submitDate"),
                                                     sheetDataSingle.get(SINGLE_MAP_FILENAME)));
+            } else if (returnCode == 1) {
+
+                writeLineToConsole(
+                        ANSI_YELLOW + "(?) " + ANSI_RESET + index + " von " + files.length + " (" + ausgleichsDokument.getName() + ") ");
+                writeLineToOutFile(
+                        "\"" + checkPerson.getVorname() + " " + checkPerson.getName() + "\" hat Wochenend-Tage eingetragen. Bitte manuell nachprüfen. Auszahlungseintrag wurde trotzdem erstellt! (Datei \"" + sheetDataSingle.get(
+                                SINGLE_MAP_FILENAME) + "\")");
+            } else {
+                writeLineToConsole(
+                        ANSI_RED + "(!) " + ANSI_RESET + index + " von " + files.length + " (" + ausgleichsDokument.getName() + ") ");
+                switch (returnCode) {
+                    case 2 -> writeLineToOutFile(
+                            "\"" + checkPerson.getVorname() + " " + checkPerson.getName() + "\" stimmt nicht mit der Mail Adresse überein. Bitte manuell nachprüfen. (Datei \"" + sheetDataSingle.get(
+                                    SINGLE_MAP_FILENAME) + "\")");
+                    case 3 -> writeLineToOutFile(
+                            "\"" + checkPerson.getVorname() + " " + checkPerson.getName() + "\" ist berechtigt, aber die angegebenen Flags stimmen nicht überein. Bitte manuell nachprüfen. (Datei \"" + sheetDataSingle.get(
+                                    SINGLE_MAP_FILENAME) + "\")");
+                    case 4 -> writeLineToOutFile(
+                            "\"" + checkPerson.getVorname() + " " + checkPerson.getName() + "\" ist nicht für einen Ausgleich berechtigt. Ggf. manuell nachprüfen. (Datei \"" + sheetDataSingle.get(
+                                    SINGLE_MAP_FILENAME) + "\")");
+                    default -> throw new IllegalStateException("Unexpected value: " + returnCode);
+                }
             }
         }
         writeLineToConsole("Alle Dateien bearbeitet.");
@@ -103,6 +135,8 @@ public class Main {
         outputWorkbook.close();
         writeLineToConsole("Output Excel erfolgreich geschrieben!");
         writer.close();
+        System.out.println(
+                "\nDas Log wurde in der Datei " + ausgleichsDokumentOrdnerPath + File.separator + "output.txt" + " gespeichert.\n");
         TerminalCommunicator.endLoop();
 
     }
@@ -168,17 +202,14 @@ public class Main {
         }
     }
 
-    public static boolean checkPermission() {
+    public static int checkPermission() {
         Person checkPerson = sheetDataBerechnung.get(sheetDataSingle.get("email"));
 
         if (!checkPerson.getName().equalsIgnoreCase(sheetDataSingle.get("name")) || !checkPerson.getVorname()
                                                                                                 .equalsIgnoreCase(
                                                                                                         sheetDataSingle.get(
                                                                                                                 "vorname"))) {
-            writeLineToOutFile(
-                    "\"" + checkPerson.getVorname() + " " + checkPerson.getName() + "\" stimmt nicht mit der Mail Adresse überein. Bitte manuell nachprüfen. (Datei \"" + sheetDataSingle.get(
-                            SINGLE_MAP_FILENAME) + "\")");
-            return false;
+            return 2;
         }
 
 
@@ -187,22 +218,14 @@ public class Main {
                     && checkPerson.isFlagPkwTime() == Boolean.parseBoolean(sheetDataSingle.get("flagPkwTime"))
                     && checkPerson.isFlagPkwWay() == Boolean.parseBoolean(sheetDataSingle.get("flagPkwWay"))) {
                 if (Boolean.parseBoolean(sheetDataSingle.get("hasWeekends"))) {
-                    writeLineToOutFile(
-                            "\"" + checkPerson.getVorname() + " " + checkPerson.getName() + "\" hat Wochenend-Tage eingetragen. Bitte manuell nachprüfen. Auszahlungseintrag wurde trotzdem erstellt! (Datei \"" + sheetDataSingle.get(
-                                    SINGLE_MAP_FILENAME) + "\")");
+                    return 1;
                 }
-                return true;
+                return 0;
             } else {
-                writeLineToOutFile(
-                        "\"" + checkPerson.getVorname() + " " + checkPerson.getName() + "\" ist berechtigt, aber die angegebenen Flags stimmen nicht überein. Bitte manuell nachprüfen. (Datei \"" + sheetDataSingle.get(
-                                SINGLE_MAP_FILENAME) + "\")");
-                return false;
+                return 3;
             }
         } else {
-            writeLineToOutFile(
-                    "\"" + checkPerson.getVorname() + " " + checkPerson.getName() + "\" ist nicht für einen Ausgleich berechtigt. Ggf. manuell nachprüfen. (Datei \"" + sheetDataSingle.get(
-                            SINGLE_MAP_FILENAME) + "\")");
-            return false;
+            return 4;
         }
     }
 
@@ -219,7 +242,7 @@ public class Main {
                     dayOfWeek = Objects.requireNonNull(parseDate(c))
                                        .format(DateTimeFormatter.ofPattern("E", Locale.ENGLISH));
                 } catch (NullPointerException ignored) {
-                    writeLineToConsole("Fehler beim parsen des Datums. Bitte manuell prüfen.");
+                    writeLineToOutFile("Fehler beim parsen des Datums. Bitte manuell prüfen.");
                 }
                 if (dayOfWeek.equalsIgnoreCase("sat") || dayOfWeek.equalsIgnoreCase("sun")) {
                     return true;
@@ -247,6 +270,7 @@ public class Main {
 
     public static void writeLineToOutFile(String message) {
         writer.println(message);
+        writeLineToConsole(message);
     }
 
     public static void writeLineToConsole(String message) {

@@ -16,16 +16,20 @@ public class TerminalCommunicator {
 
     private static LineReader reader;
 
+    private static String configFilePath;
+
+    private static JFileChooser chooser;
+
     public static void initSession() throws IOException {
         Terminal terminal = TerminalBuilder.terminal();
+        chooser = new JFileChooser();
         reader = LineReaderBuilder.builder()
                                   .terminal(terminal)
                                   .parser(new DefaultParser())
                                   .build();
 
-        JFileChooser chooser = new JFileChooser();
 
-        String configFilePath = System.getProperty("user.home") + File.separator + "ausgleichstool.cfg";
+        configFilePath = System.getProperty("user.home") + File.separator + "ausgleichstool.cfg";
         File configFile = new File(configFilePath);
         if (configFile.exists()) {
             Scanner scanner = new Scanner(configFile, StandardCharsets.UTF_8);
@@ -36,8 +40,26 @@ public class TerminalCommunicator {
             } catch (NoSuchElementException e) {
                 System.out.println("Config File vollständig. Neue Daten werden gespeichert.");
             }
+
+            String chosenOption =
+                    reader.readLine("Config Datei gefunden. Sollen die Pfade überprüft bzw. angepasst werden? [y/n]");
+            if (!(chosenOption.equalsIgnoreCase("y") || chosenOption.equalsIgnoreCase("n"))) {
+                while (!(chosenOption.equalsIgnoreCase("y") || chosenOption.equalsIgnoreCase("n"))) {
+                    chosenOption = reader.readLine("Ungültige Option, [y/n]?");
+                }
+            }
+
+            if (chosenOption.equalsIgnoreCase("y")) {
+                editConfig();
+            }
+        } else {
+            editConfig();
         }
 
+
+    }
+
+    public static void editConfig() throws IOException {
         String chosenOption =
                 reader.readLine("Berechnungstabelle liegt hier: \"" + Main.berechnungsWorkbookPath + "\"? [y/n]");
 
